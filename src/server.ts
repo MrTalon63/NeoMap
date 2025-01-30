@@ -14,10 +14,20 @@ app.use("/", serveStatic({ root: "./public" }));
 
 app.post("/api/v1/geosubmit", async (c) => {
 	const enconding = await c.req.header("Content-Encoding");
-	if (enconding !== "gzip") {
-		return c.json({ status: 400, message: "Bad Request" });
+	if (enconding && enconding !== "gzip") {
+		console.log(enconding);
+		return c.json({ status: 400, message: "Bad Request" }, 400);
 	}
-	const body = await c.req.arrayBuffer();
+	let json: Geosubmit;
+	if (enconding === "gzip") {
+		const body = await c.req.arrayBuffer();
+		const arr = new Uint8Array(body);
+		const data = await gunzip(arr);
+		json = JSON.parse(new TextDecoder().decode(data)) as Geosubmit;
+	} else {
+		json = (await c.req.json()) as Geosubmit;
+	}
+	const body = gzip(new TextEncoder().encode(JSON.stringify(json)));
 
 	const ftch = await fetch("https://api.beacondb.net/v2/geosubmit", {
 		method: "POST",
@@ -28,13 +38,9 @@ app.post("/api/v1/geosubmit", async (c) => {
 		body: body,
 	});
 	if (ftch.status !== 200) {
-		return c.json({ status: ftch.status, message: "Bad Request" });
+		return c.json({ status: ftch.status, message: "Bad Request" }, 400);
 	}
 
-	let json: Geosubmit;
-	const arr = new Uint8Array(body);
-	const data = await gunzip(arr);
-	json = JSON.parse(new TextDecoder().decode(data));
 	json.items.forEach((item) => {
 		const timestamp = Math.floor(item.timestamp / 1000);
 		const hex = h3.latLngToCell(item.position.latitude, item.position.longitude, 11);
@@ -64,8 +70,11 @@ app.post("/api/v1/geosubmit", async (c) => {
 			});
 		}
 
-		const isHexInDb = db.prepare("SELECT hex_id FROM hexes WHERE hex_id = ?").get(hex);
-		if (isHexInDb) {
+		const hexInDb = db.prepare("SELECT * FROM hexes WHERE hex_id = ?").get(hex) as { hex_id: string; wifi: boolean; gsm: boolean; wcdma: boolean; lte: boolean; ble: boolean; last_update: number } | undefined;
+
+		if (hexInDb && hexInDb.last_update >= timestamp && hexInDb.wifi === hasWifi && hexInDb.gsm === hasGsm && hexInDb.wcdma === hasWcdma && hexInDb.lte === hasLte && hexInDb.ble === hasBle) return;
+
+		if (hexInDb) {
 			db.prepare(
 				`
 				UPDATE hexes 
