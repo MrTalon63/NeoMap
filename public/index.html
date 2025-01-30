@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pl">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>NepMap</title>
+		<style>
+			#map {
+				height: 80vh;
+				width: 100%;
+			}
+			.filter-menu {
+				position: absolute;
+				top: 10px;
+				right: 10px;
+				z-index: 1000;
+				background: white;
+				padding: 15px;
+				border-radius: 5px;
+				box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+			}
+			.filter-group {
+				margin-bottom: 10px;
+			}
+			label {
+				display: block;
+				margin: 5px 0;
+			}
+		</style>
+		<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+		<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+		<script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+	</head>
+	<body>
+		<div class="filter-menu">
+			<div class="filter-group">
+				<h3>Czas aktualizacji</h3>
+				<select id="timeFilter">
+					<option value="any">Dowolny czas</option>
+					<option value="3600">Ostatnia godzina</option>
+					<option value="86400">Ostatnie 24 godziny</option>
+					<option value="604800">Ostatnie 7 dni</option>
+				</select>
+			</div>
+
+			<div class="filter-group">
+				<h3>Filtry sygnałów</h3>
+				<label><input type="checkbox" class="signal-filter" value="wifi" /> WiFi</label>
+				<label><input type="checkbox" class="signal-filter" value="ble" /> BLE</label>
+				<label><input type="checkbox" class="signal-filter" value="gsm" /> GSM</label>
+				<label><input type="checkbox" class="signal-filter" value="wcdma" /> WCDMA</label>
+				<label><input type="checkbox" class="signal-filter" value="lte" /> LTE</label>
+				<p style="color: #666; margin-top: 5px">(Zaznacz jakie sygnały mają być obecne)</p>
+			</div>
+		</div>
+
+		<div id="map"></div>
+		<script>
+			let currentMarkers = [];
+			const map = L.map("map").setView([50.3, 18.7], 13);
+			L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+				attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+			}).addTo(map);
+			generateHexes();
+			async function generateHexes() {
+				const req = await fetch("/api/v1/hexes");
+				const hexes = await req.json();
+
+				const timeFilter = document.getElementById("timeFilter").value;
+				const selectedSignals = Array.from(document.querySelectorAll(".signal-filter:checked")).map((x) => x.value);
+
+				currentMarkers.forEach((marker) => map.removeLayer(marker));
+				currentMarkers = [];
+
+				hexes.forEach((hex) => {
+					const isTimeValid = timeFilter === "any" || Date.now() / 1000 - hex.last_update < timeFilter;
+					const hasAllSignals = selectedSignals.every((signal) => hex[signal] === 1);
+					const isSignalValid = selectedSignals.length === 0 || hasAllSignals;
+
+					if (isTimeValid && isSignalValid) {
+						const latLngs = h3.cellToBoundary(hex.hex_id).map((coord) => [coord[0], coord[1]]);
+						const marker = L.polygon(latLngs, {
+							color: "#3388ff",
+							fillColor: getColorForSignals(hex),
+							fillOpacity: 0.2,
+						})
+							.bindPopup(
+								`
+			        	    	<div style="line-height: 1.5;">
+			        	    	   <strong>H3 ID:</strong> ${hex.hex_id}<br>
+			        	    	   <strong>Aktualizacja:</strong> ${new Date(hex.last_update * 1000).toLocaleString("PL")}<br>
+									<strong>Technologie:</strong><br>
+			        	    	   <strong>WiFi:</strong> ${hex.wifi ? "Tak" : "Nie"}<br>
+									<strong>BLE:</strong> ${hex.ble ? "Tak" : "Nie"}<br>
+									<strong>GSM:</strong> ${hex.gsm ? "Tak" : "Nie"}<br>
+									<strong>WCDMA:</strong> ${hex.wcdma ? "Tak" : "Nie"}<br>
+									<strong>LTE:</strong> ${hex.lte ? "Tak" : "Nie"}<br>
+								</div>
+			        	 	`,
+							)
+							.addTo(map);
+						currentMarkers.push(marker);
+					}
+				});
+			}
+
+			function formatSignalInfo(hex) {
+				return Object.entries(hex)
+					.filter(([key]) => ["wifi", "gsm", "lte"].includes(key))
+					.map(([key, value]) => `<b>${key.toUpperCase()}:</b> ${value ? "✓" : "✗"}<br>`)
+					.join("");
+			}
+
+			function getColorForSignals(hex) {
+				const activeSignals = [hex.wifi && "#00ff00", hex.gsm && "#0000ff", hex.lte && "#ff0000"].filter(Boolean);
+
+				return activeSignals.length > 0 ? activeSignals[0] : "#3388ff";
+			}
+
+			document.querySelectorAll("select, input").forEach((element) => {
+				element.addEventListener("change", generateHexes);
+			});
+		</script>
+	</body>
+</html>
