@@ -72,8 +72,6 @@ app.post("/api/v1/geosubmit", async (c) => {
 
 		const hexInDb = db.prepare("SELECT * FROM hexes WHERE hex_id = ?").get(hex) as { hex_id: string; wifi: boolean; gsm: boolean; wcdma: boolean; lte: boolean; ble: boolean; last_update: number } | undefined;
 
-		if (hexInDb && hexInDb.last_update >= timestamp && hexInDb.wifi === hasWifi && hexInDb.gsm === hasGsm && hexInDb.wcdma === hasWcdma && hexInDb.lte === hasLte && hexInDb.ble === hasBle) return;
-
 		if (hexInDb) {
 			db.prepare(
 				`
