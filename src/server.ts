@@ -5,6 +5,7 @@ import { serveStatic } from "hono/deno";
 import { logger } from "hono/logger";
 
 import { db } from "./db.ts";
+import { kv } from "./kv.ts";
 import { Geosubmit } from "./types.d.ts";
 
 const app = new Hono();
@@ -41,7 +42,7 @@ app.post("/api/v1/geosubmit", async (c) => {
 		return c.json({ status: ftch.status, message: "Bad Request" }, 400);
 	}
 
-	json.items.forEach((item) => {
+	json.items.forEach(async (item) => {
 		const timestamp = Math.floor(item.timestamp / 1000);
 		const hex = h3.latLngToCell(item.position.latitude, item.position.longitude, 11);
 		let hasGsm = false,
@@ -70,9 +71,14 @@ app.post("/api/v1/geosubmit", async (c) => {
 			});
 		}
 
-		const hexInDb = db.prepare("SELECT * FROM hexes WHERE hex_id = ?").get(hex) as { hex_id: string; wifi: boolean; gsm: boolean; wcdma: boolean; lte: boolean; ble: boolean; last_update: number } | undefined;
+		const hexInKv = await kv.get([hex]);
+		if (hexInKv.value) {
+			const { wifi, gsm, wcdma, lte, ble, last_update } = JSON.parse(hexInKv.value as string);
 
-		if (hexInDb) {
+			if (last_update > timestamp && wifi === hasWifi && gsm === hasGsm && wcdma === hasWcdma && lte === hasLte && ble === hasBle) {
+				return c.json({ status: 200, message: "OK" });
+			}
+
 			db.prepare(
 				`
 				UPDATE hexes 
@@ -86,10 +92,31 @@ app.post("/api/v1/geosubmit", async (c) => {
 				WHERE hex_id = ?
 			`,
 			).run(hasWifi, hasGsm, hasWcdma, hasLte, hasBle, timestamp, hex);
+			kv.set([hex], JSON.stringify({ wifi: hasWifi, gsm: hasGsm, wcdma: hasWcdma, lte: hasLte, ble: hasBle, last_update: timestamp }));
 		} else {
-			db.prepare("INSERT INTO hexes (hex_id, wifi, gsm, wcdma, lte, ble, last_update) VALUES (?, ?, ?, ?, ?, ?, ?)").run(hex, hasWifi, hasGsm, hasWcdma, hasLte, hasBle, timestamp);
+			const hexInDb = db.prepare("SELECT * FROM hexes WHERE hex_id = ?").get(hex) as { hex_id: string; wifi: boolean; gsm: boolean; wcdma: boolean; lte: boolean; ble: boolean; last_update: number } | undefined;
+			if (hexInDb) {
+				db.prepare(
+					`
+					UPDATE hexes 
+					SET 
+						wifi = MAX(wifi, ?),
+						gsm = MAX(gsm, ?),
+						wcdma = MAX(wcdma, ?),
+						lte = MAX(lte, ?),
+						ble = MAX(ble, ?),
+						last_update = ? 
+					WHERE hex_id = ?
+				`,
+				).run(hasWifi, hasGsm, hasWcdma, hasLte, hasBle, timestamp, hex);
+				kv.set([hex], JSON.stringify({ wifi: hasWifi, gsm: hasGsm, wcdma: hasWcdma, lte: hasLte, ble: hasBle, last_update: timestamp }));
+			} else {
+				db.prepare("INSERT INTO hexes (hex_id, wifi, gsm, wcdma, lte, ble, last_update) VALUES (?, ?, ?, ?, ?, ?, ?)").run(hex, hasWifi, hasGsm, hasWcdma, hasLte, hasBle, timestamp);
+				kv.set([hex], JSON.stringify({ wifi: hasWifi, gsm: hasGsm, wcdma: hasWcdma, lte: hasLte, ble: hasBle, last_update: timestamp }));
+			}
 		}
 	});
+	//db.exec("PRAGMA wal_checkpoint(PASSIVE);");
 	return c.json({ status: 200, message: "OK" });
 });
 

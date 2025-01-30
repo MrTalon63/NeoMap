@@ -1,6 +1,6 @@
 {
 	"tasks": {
-		"dev": "deno run --watch -A src/server.ts"
+		"dev": "deno run --watch -A --unstable-kv src/server.ts"
 	},
 	"imports": {
 		"@db/sqlite": "jsr:@db/sqlite@^0.12.0",
