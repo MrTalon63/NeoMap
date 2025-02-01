@@ -3,14 +3,17 @@ import { gunzip, gzip } from "@deno-library/compress";
 import { Hono } from "hono";
 import { serveStatic } from "hono/deno";
 import { logger } from "hono/logger";
+import { compress } from "hono/compress";
 
 import { db } from "./db.ts";
 import { kv } from "./kv.ts";
 import { Geosubmit } from "./types.d.ts";
 
+import { stats } from "./html/stats.ts";
+
 const app = new Hono();
 
-app.use(logger());
+app.use(logger(), compress());
 app.use("/", serveStatic({ root: "./public" }));
 
 app.post("/api/v1/geosubmit", async (c) => {
@@ -28,6 +31,7 @@ app.post("/api/v1/geosubmit", async (c) => {
 	} else {
 		json = (await c.req.json()) as Geosubmit;
 	}
+
 	const body = gzip(new TextEncoder().encode(JSON.stringify(json)));
 
 	const ftch = await fetch("https://api.beacondb.net/v2/geosubmit", {
@@ -43,8 +47,9 @@ app.post("/api/v1/geosubmit", async (c) => {
 	}
 
 	json.items.forEach(async (item) => {
+		if (item.position.altitude > 2000) return;
 		const timestamp = Math.floor(item.timestamp / 1000);
-		const hex = h3.latLngToCell(item.position.latitude, item.position.longitude, 11);
+		const hex = h3.latLngToCell(item.position.latitude, item.position.longitude, 10);
 		let hasGsm = false,
 			hasWcdma = false,
 			hasLte = false,
@@ -123,6 +128,48 @@ app.post("/api/v1/geosubmit", async (c) => {
 app.get("/api/v1/hexes", async (c) => {
 	const hexes = db.prepare("SELECT hex_id, wifi, gsm, wcdma, lte, ble, last_update FROM hexes").all();
 	return c.json(hexes);
+});
+
+app.get("/api/v1/stats", async (c) => {
+	const stats = db.prepare("SELECT COUNT(hex_id) as hexes, SUM(wifi) as wifi, SUM(gsm) as gsm, SUM(wcdma) as wcdma, SUM(lte) as lte, SUM(ble) as ble FROM hexes").get();
+	return c.json(stats);
+});
+
+app.get("/stats", async (c) => {
+	const stat = db.prepare("SELECT COUNT(hex_id) as hexes, SUM(wifi) as wifi, SUM(gsm) as gsm, SUM(wcdma) as wcdma, SUM(lte) as lte, SUM(ble) as ble FROM hexes").get();
+	if (!stat) return c.json({ status: 500, message: "Server Error" }, 500);
+	return c.html(`<!DOCTYPE html>
+		<html lang="pl">
+			<head>
+				<meta charset="UTF-8" />
+				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+				<title>NeoMap</title>
+				<style>
+					center {
+						display: flex;
+						justify-content: center;
+						align-items: center;
+						height: 100vh;
+					}
+				</style>
+				<script>
+					const stats = ${JSON.stringify(stat)};
+					document.addEventListener("DOMContentLoaded", () => {
+						const center = document.querySelector(".center");
+						center.innerHTML = \`<h1>Stats</h1>
+							<p>Hexes: \${stats.hexes}</p>
+							<p>Wifi: \${stats.wifi}</p>
+							<p>GSM: \${stats.gsm}</p>
+							<p>WCDMA: \${stats.wcdma}</p>
+							<p>LTE: \${stats.lte}</p>
+							<p>BLE: \${stats.ble}</p>\`;
+					});
+				</script>
+			</head>
+			<body>
+				<div class="center">test</div>
+			</body>
+		</html> `);
 });
 
 Deno.serve(app.fetch);
