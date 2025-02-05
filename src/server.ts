@@ -9,8 +9,6 @@ import { db } from "./db.ts";
 import { kv } from "./kv.ts";
 import { Geosubmit } from "./types.d.ts";
 
-import { stats } from "./html/stats.ts";
-
 const app = new Hono();
 
 app.use(logger(), compress());
