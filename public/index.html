@@ -87,7 +87,7 @@
 				currentMarkers.forEach((marker) => map.removeLayer(marker));
 				currentMarkers = [];
 
-				hexes.forEach((hex) => {
+				hexes.data.forEach((hex) => {
 					const isTimeValid = timeFilter === "any" || Date.now() / 1000 - hex.last_update < timeFilter;
 					const hasAllSignals = selectedSignals.every((signal) => hex[signal] === 1);
 					const isSignalValid = selectedSignals.length === 0 || hasAllSignals;
