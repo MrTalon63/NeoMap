@@ -103,6 +103,7 @@ app.onError((err, c) => {
 	const isDev = Deno.env.get("NODE_ENV") === "development";
 	if (isDev) {
 		console.error(err);
+		console.log(Deno.env.toObject());
 		return c.json({ status: 500, message: "Server Error", error: err.message }, 500);
 	}
 	return c.json({ status: 500, message: "Server Error" }, 500);
