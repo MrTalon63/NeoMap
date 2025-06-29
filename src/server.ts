@@ -28,6 +28,20 @@ const oidcClaimsHook = async (orig: OidcAuth | undefined, claims: IDToken | unde
 	};
 };
 
+app.get("/auth/logout", async (c) => {
+	const auth = await getAuth(c);
+	if (!auth) {
+		return c.json({ status: 401, message: "Unauthorized" }, 401);
+	}
+	await revokeSession(c);
+	return c.json({ status: 200, message: "OK" });
+});
+
+app.get("/auth/login", async (c) => {
+	const auth = await getAuth(c);
+	return c.json({ status: 200, message: "OK", data: auth });
+});
+
 app.get("/auth/callback", async (c: Context) => {
 	c.set("oidcClaimsHook", oidcClaimsHook);
 	return processOAuthCallback(c);
@@ -42,20 +56,6 @@ app.use("/auth/*", async (c, next) => {
 		return c.json({ status: 401, message: "Unauthorized" }, 401);
 	}
 	await next();
-});
-
-app.get("/auth/logout", async (c) => {
-	const auth = await getAuth(c);
-	if (!auth) {
-		return c.json({ status: 401, message: "Unauthorized" }, 401);
-	}
-	await revokeSession(c);
-	return c.json({ status: 200, message: "OK" });
-});
-
-app.get("/auth/login", async (c) => {
-	const auth = await getAuth(c);
-	return c.json({ status: 200, message: "OK", data: auth });
 });
 
 app.route("/", api);
