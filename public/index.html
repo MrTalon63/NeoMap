@@ -11,7 +11,7 @@
 			}
 			.filter-menu {
 				position: absolute;
-				top: 10px;
+				top: 40px;
 				right: 10px;
 				z-index: 1000;
 				background: white;
@@ -32,6 +32,16 @@
 		<script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
 	</head>
 	<body>
+		<header>
+			<div style="font-size: 20px; text-align: center">
+				<div style="font-size: 20px; text-align: left">
+					<a href="/" style="font-weight: bold; color: black; margin-right: 20px; text-decoration: none">NeoMap</a>
+					<a href="/stats" style="margin: 0 10px; color: black; text-decoration: none">Statystyka</a>
+					<a href="/user" style="margin: 0 10px; color: black; text-decoration: none">Profil</a>
+					<a href="/user/settings" style="margin: 0 10px; color: black; text-decoration: none">Ustawienia</a>
+				</div>
+			</div>
+		</header>
 		<div class="filter-menu">
 			<div class="filter-group">
 				<h3>Czas aktualizacji</h3>
@@ -51,7 +61,11 @@
 				<label><input type="checkbox" class="signal-filter" value="wcdma" /> WCDMA</label>
 				<label><input type="checkbox" class="signal-filter" value="lte" /> LTE</label>
 				<p style="color: #666; margin-top: 5px">(Zaznacz jakie sygnały mają być obecne)</p>
-				<a href="/stats">Statystyka</a>
+			</div>
+
+			<div class="filter-group">
+				<h3>Filtr użytkownika</h3>
+				<label><input type="checkbox" class="signal-filter" value="user" /> Pokaż tylko moje</label>
 			</div>
 		</div>
 
